@@ -1,7 +1,3 @@
-
-### index.js
-
-```javascript
 import { extension_settings, loadExtensionSettings } from "../../../extensions.js";
 import { saveSettingsDebounced, eventSource, event_types } from "../../../../script.js";
 import { callPopup } from "../../../../script.js";
@@ -237,4 +233,3 @@ jQuery(async () => {
     
     console.log("消息隐藏助手插件已加载");
 });
-```
