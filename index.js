@@ -1,309 +1,240 @@
-import { extension_settings, getContext } from "../../../extensions.js";
-import { saveSettingsDebounced, eventSource, event_types } from "../../../../script.js";
 
-const extensionName = "search-plugin";
-const extensionSettings = extension_settings[extensionName] || {};
+### index.js
+
+```javascript
+import { extension_settings, loadExtensionSettings } from "../../../extensions.js";
+import { saveSettingsDebounced, eventSource, event_types } from "../../../../script.js";
+import { callPopup } from "../../../../script.js";
+import { getContext } from "../../../extensions.js";
+
+// 插件名称和设置
+const extensionName = "hide-helper";
 const defaultSettings = {
-    searchScope: "loaded", // "loaded" 或 "full"，默认只检索已加载消息
-    realTimeRendering: true, // 默认开启实时渲染
-    highlightKeywords: true // 默认开启关键词高亮
+    hideLastN: 0,
+    advancedStart: -1,
+    advancedEnd: -1,
+    isAdvancedMode: false
 };
 
 // 初始化插件设置
-function initSettings() {
+function loadSettings() {
     extension_settings[extensionName] = extension_settings[extensionName] || {};
     if (Object.keys(extension_settings[extensionName]).length === 0) {
         Object.assign(extension_settings[extensionName], defaultSettings);
     }
-}
-
-// 获取聊天记录（支持全文检索）
-async function fetchChatLog(chatId, start = 0, end) {
-    try {
-        const url = `/api/shells/chat/getchatlog?chatid=${chatId}&start=${start}${end ? `&end=${end}` : ''}`;
-        const response = await fetch(url, { method: "GET", headers: { "Content-Type": "application/json" } });
-        if (!response.ok) {
-            const message = `获取聊天记录失败: HTTP ${response.status} - ${response.statusText}`;
-            console.error(message);
-            throw new Error(message);
-        }
-        return await response.json();
-    } catch (error) {
-        console.error("fetchChatLog error:", error);
-        toastr.error("获取聊天记录失败，请检查控制台日志");
-        return null;
-    }
-}
-
-// 获取聊天记录总长度
-async function getChatLogLength(chatId) {
-    try {
-        const response = await fetch(`/api/shells/chat/getchatloglength?chatid=${chatId}`);
-        if (!response.ok) {
-            const message = `获取聊天记录长度失败: HTTP ${response.status} - ${response.statusText}`;
-            console.error(message);
-            throw new Error(message);
-        }
-        const data = await response.json();
-        return data.length;
-    } catch (error) {
-        console.error("getChatLogLength error:", error);
-        toastr.error("获取聊天记录长度失败，请检查控制台日志");
-        return 0;
-    }
-}
-
-// 滚动到指定消息
-function scrollToMessage(messageId) {
-    const messageElement = document.querySelector(`.mes[mesid="${messageId}"]`);
-    if (messageElement) {
-        messageElement.scrollIntoView({ behavior: "smooth", block: "start" }); // 滚动到消息顶部
+    
+    // 更新UI以反映当前设置
+    $("#hide-helper-last-n").val(extension_settings[extensionName].hideLastN);
+    $("#hide-helper-advanced-start").val(extension_settings[extensionName].advancedStart);
+    $("#hide-helper-advanced-end").val(extension_settings[extensionName].advancedEnd);
+    
+    // 如果是高级模式，显示高级设置面板
+    if (extension_settings[extensionName].isAdvancedMode) {
+        $(".hide-helper-advanced-panel").show();
     } else {
-        toastr.error("无法跳转到指定楼层：消息未加载或不存在", null, { class: 'toast-error' });
+        $(".hide-helper-advanced-panel").hide();
     }
 }
 
-// 关键词检索
-async function searchMessages(keyword) {
-    if (!keyword) {
-        resetHighlight(); // 清除高亮
-        return;
-    }
+// 保存设置
+function saveSettings() {
+    saveSettingsDebounced();
+}
+
+// 应用隐藏设置
+async function applyHideSettings() {
     const context = getContext();
-    if (!context || !context.chat || !context.chatId) {
-        console.warn("getContext() 或 chat 上下文不可用");
-        toastr.error("聊天上下文不可用，请重试", null, { class: 'toast-error' });
-        return;
-    }
     const chat = context.chat;
-    const settings = extension_settings[extensionName];
-    let results = [];
-    console.log(`开始关键词检索: 关键词="${keyword}", 检索范围="${settings.searchScope}", 实时渲染="${settings.realTimeRendering}", 关键词提亮="${settings.highlightKeywords}"`);
-
-    if (settings.searchScope === "loaded") {
-        console.log("检索范围：已加载消息");
-        results = chat.filter(msg => msg.mes && msg.mes.toLowerCase().includes(keyword.toLowerCase())).map((msg, index) => ({
-            id: index, // 使用 chat 数组的索引作为 messageId
-            content: msg.mes
-        }));
-        console.log(`已加载消息检索结果数量: ${results.length}`);
-        if (results.length > 0) {
-            scrollToMessage(results[0].id);
-            if (settings.highlightKeywords) highlightKeyword(keyword);
-        } else {
-            toastr.error("关键词检索失败：在已加载消息中未找到匹配消息", null, { class: 'toast-error' });
-            resetHighlight(); // 清除高亮
-        }
-    } else if (settings.searchScope === "full") {
-        console.log("检索范围：全文消息");
-        const chatLength = await getChatLogLength(context.chatId);
-        if (chatLength === 0) {
-            toastr.error("关键词检索失败：聊天记录为空", null, { class: 'toast-error' });
-            return;
-        }
-        const fullChat = await fetchChatLog(context.chatId, 0, chatLength);
-        if (!fullChat) { // fetchChatLog 失败时返回 null
-            return; // 错误信息已在 fetchChatLog 中提示
-        }
-        results = fullChat.filter(msg => msg.content && msg.content.toLowerCase().includes(keyword.toLowerCase())).map((msg, index) => ({
-            id: index, // 使用 fullChat 的索引作为 messageId，这里假设 API 返回的消息顺序与楼层一致
-            content: msg.content
-        }));
-        console.log(`全文消息检索结果数量: ${results.length}`);
-        if (results.length > 0) {
-            scrollToMessage(results[0].id);
-            if (settings.highlightKeywords) highlightKeyword(keyword);
-        } else {
-            toastr.error("关键词检索失败：在所有消息中未找到匹配消息", null, { class: 'toast-error' });
-            resetHighlight(); // 清除高亮
-        }
-    } else {
-        console.warn("未知的检索范围设置:", settings.searchScope);
-        toastr.error("插件设置错误：未知的检索范围", null, { class: 'toast-error' });
-    }
-    console.log("关键词检索完成");
-}
-
-// 高亮关键词
-function highlightKeyword(keyword) {
-    resetHighlight(); // 避免多次高亮叠加
-    const messages = document.querySelectorAll(".mes_text");
-    messages.forEach(msg => {
-        const text = msg.innerHTML;
-        const regex = new RegExp(`(${keyword})`, "gi");
-        msg.innerHTML = text.replace(regex, '<span class="highlighted-keyword" style="color: red; font-weight: bold;">$1</span>');
-    });
-}
-
-// 清除高亮
-function resetHighlight() {
-    const highlightedKeywords = document.querySelectorAll(".highlighted-keyword");
-    highlightedKeywords.forEach(span => {
-        const parent = span.parentNode;
-        parent.innerHTML = parent.innerHTML.replace(span.outerHTML, span.textContent);
-    });
-}
-
-
-// 楼层跳转
-async function jumpToFloor(floorNumber) {
-    const context = getContext();
-    if (!context || !context.chat || !context.chatId) {
-        console.warn("getContext() 或 chat 上下文不可用");
-        toastr.error("聊天上下文不可用，请重试", null, { class: 'toast-error' });
+    
+    if (!chat || chat.length === 0) {
+        toastr.warning("聊天记录为空，无法应用隐藏设置");
         return;
     }
-    const chat = context.chat;
-    const floor = parseInt(floorNumber, 10);
-
-    if (isNaN(floor) || floor < 0) {
-        toastr.error("楼层号无效，请输入有效的数字", null, { class: 'toast-error' });
-        return;
+    
+    // 先取消所有隐藏
+    for (let i = 0; i < chat.length; i++) {
+        if (chat[i].is_system) {
+            await hideChatMessageRange(i, i, true);
+        }
     }
-
-    if (floor < chat.length) {
-        scrollToMessage(floor); // 优先跳转已加载楼层
-    } else {
-        const chatLength = await getChatLogLength(context.chatId);
-        if (floor < chatLength) {
-            const fullChat = await fetchChatLog(context.chatId, floor, floor + 1); // 获取目标楼层附近的消息，预加载？实际上scrollToMessage已经处理了未加载的情况，这里fetchChatLog意义不大，可以优化
-            if (fullChat) {
-                 scrollToMessage(floor);
+    
+    // 根据设置应用隐藏
+    if (extension_settings[extensionName].isAdvancedMode) {
+        // 高级模式：隐藏指定范围的消息
+        const start = parseInt(extension_settings[extensionName].advancedStart);
+        const end = parseInt(extension_settings[extensionName].advancedEnd);
+        
+        if (!isNaN(start) && !isNaN(end) && start >= -1 && end > start) {
+            const actualStart = start === -1 ? 0 : start;
+            const actualEnd = end >= chat.length ? chat.length - 1 : end;
+            
+            if (actualStart < actualEnd) {
+                await hideChatMessageRange(actualStart, actualEnd, false);
+                toastr.success(`已隐藏第 ${actualStart+1} 至 ${actualEnd+1} 条消息`);
             }
-        } else {
-            toastr.error(`指定楼层跳转失败：楼层号超出范围 (当前消息总数: ${chatLength})`, null, { class: 'toast-error' });
+        }
+    } else {
+        // 基本模式：隐藏最后N条之前的所有消息
+        const hideLastN = parseInt(extension_settings[extensionName].hideLastN);
+        
+        if (!isNaN(hideLastN) && hideLastN > 0 && hideLastN < chat.length) {
+            const startIdx = 0;
+            const endIdx = chat.length - hideLastN - 1;
+            
+            if (endIdx >= startIdx) {
+                await hideChatMessageRange(startIdx, endIdx, false);
+                toastr.success(`已隐藏第 ${startIdx+1} 至 ${endIdx+1} 条消息`);
+            }
         }
     }
 }
 
-// UI 初始化
-jQuery(async () => {
-    initSettings();
-
-    const uiHtml = `
-        <div id="search-plugin-ui">
-            <div class="keyword-search">
-                <input type="text" id="search-input" placeholder="输入关键词" />
-                <button id="search-action" class="menu_button">${extensionSettings.realTimeRendering ? "清空" : "确定"}</button>
+// 创建插件UI
+function createUI() {
+    const html = `
+    <div class="hide-helper-panel">
+        <div class="hide-helper-title">消息隐藏助手</div>
+        
+        <div class="hide-helper-section">
+            <input type="number" id="hide-helper-last-n" class="hide-helper-input" placeholder="保留最后N条消息" min="0">
+            <div class="hide-helper-buttons">
+                <button id="hide-helper-advanced-btn" class="hide-helper-button">高级设置</button>
+                <button id="hide-helper-apply-btn" class="hide-helper-button">应用</button>
             </div>
-            <div class="scroll-buttons">
-                <button id="scroll-up" class="menu_button" title="滚动到最早消息">↑</button>
-                <button id="jump-to-floor" class="menu_button">跳转楼层</button>
-                <button id="scroll-down" class="menu_button" title="滚动到最新消息">↓</button>
-            </div>
-            <div class="advanced-settings-button-area">
-                <button id="advanced-settings-btn" class="menu_button">高级检索设置</button>
-            </div>
-
-            <div id="advanced-settings-panel" class="hidden">
-                <label for="search-scope-loaded">检索方式:</label>
-                <input type="radio" id="search-scope-loaded" name="scope" value="loaded" ${extensionSettings.searchScope === "loaded" ? "checked" : ""}> <label for="search-scope-loaded">只检索加载消息</label>
-                <input type="radio" id="search-scope-full" name="scope" value="full" ${extensionSettings.searchScope === "full" ? "checked" : ""}> <label for="search-scope-full">检索全文消息</label>
-                <br>
-                <label for="real-time-rendering">检索渲染:</label>
-                <input type="checkbox" id="real-time-rendering" ${extensionSettings.realTimeRendering ? "checked" : ""}> <label for="real-time-rendering">实时渲染</label>
-                <br>
-                <label for="highlight-keywords">关键词提亮:</label>
-                <input type="checkbox" id="highlight-keywords" ${extensionSettings.highlightKeywords ? "checked" : ""}> <label for="highlight-keywords">关键词提亮</label>
-                <button id="save-settings" class="menu_button">保存设置</button>
-            </div>
-            <div id="floor-jump-popup" class="hidden">
-                <label for="floor-input">跳转到指定楼层</label>
-                <input type="number" id="floor-input" placeholder="输入楼层号" />
-                <div id="floor-info"></div>
-                <button id="floor-jump-action" class="menu_button">跳转</button>
+            
+            <div class="hide-helper-advanced-panel" style="display: none;">
+                <input type="number" id="hide-helper-advanced-start" class="hide-helper-advanced-input" placeholder="起始楼层" min="-1">
+                <input type="number" id="hide-helper-advanced-end" class="hide-helper-advanced-input" placeholder="结束楼层">
+                <button id="hide-helper-advanced-apply-btn" class="hide-helper-button">确定</button>
             </div>
         </div>
+        
+        <button id="hide-helper-save-btn" class="hide-helper-save-button">保存当前设置</button>
+    </div>
     `;
-    $("body").append(uiHtml);
-
-    // 关键词检索
-    $("#search-input").on("input", () => {
-        if (extensionSettings.realTimeRendering) {
-            searchMessages($("#search-input").val());
-        }
+    
+    $("body").append(html);
+    
+    // 绑定事件
+    $("#hide-helper-last-n").on("input", function() {
+        extension_settings[extensionName].hideLastN = parseInt($(this).val()) || 0;
+        extension_settings[extensionName].isAdvancedMode = false;
+        $(".hide-helper-advanced-panel").hide();
+        saveSettings();
     });
-    $("#search-action").on("click", () => {
-        if (extensionSettings.realTimeRendering) {
-            $("#search-input").val("");
-            resetHighlight(); // 清空关键词高亮
-        } else {
-            searchMessages($("#search-input").val());
-        }
-    });
-
-    // 快速滚动
-    $("#scroll-up").on("click", () => {
-        const firstMessage = document.querySelector(".mes:first-child");
-        if (firstMessage) {
-            firstMessage.scrollIntoView({ behavior: "smooth", block: "start" });
-        } else {
-            toastr.error("无法滚动到最早消息：聊天记录为空或未加载", null, { class: 'toast-error' });
-        }
-    });
-    $("#scroll-down").on("click", () =>  {
-        const lastMessage = document.querySelector(".mes:last-child");
-        if (lastMessage) {
-            lastMessage.scrollIntoView({ behavior: "smooth", block: "end" });
-        } else {
-            toastr.error("无法滚动到最新消息：聊天记录为空或未加载", null, { class: 'toast-error' });
-        }
-    });
-
-
-    // 楼层跳转
-    $("#jump-to-floor").on("click", () => $("#floor-jump-popup").toggleClass("hidden"));
-    $("#floor-input").on("input", () => {
-        const floor = $("#floor-input").val();
+    
+    $("#hide-helper-advanced-btn").on("click", function() {
+        extension_settings[extensionName].isAdvancedMode = true;
+        
+        // 设置默认值
         const context = getContext();
-        if (!context || !context.chat) return; // 避免 context.chat 为 undefined
         const chat = context.chat;
+        
+        if (!extension_settings[extensionName].advancedStart || extension_settings[extensionName].advancedStart < -1) {
+            extension_settings[extensionName].advancedStart = -1;
+            $("#hide-helper-advanced-start").val(-1);
+        }
+        
+        if (!extension_settings[extensionName].advancedEnd || extension_settings[extensionName].advancedEnd <= extension_settings[extensionName].advancedStart) {
+            extension_settings[extensionName].advancedEnd = chat ? chat.length : 0;
+            $("#hide-helper-advanced-end").val(extension_settings[extensionName].advancedEnd);
+        }
+        
+        $(".hide-helper-advanced-panel").show();
+        saveSettings();
+    });
+    
+    $("#hide-helper-apply-btn").on("click", function() {
+        extension_settings[extensionName].isAdvancedMode = false;
+        $(".hide-helper-advanced-panel").hide();
+        applyHideSettings();
+    });
+    
+    $("#hide-helper-advanced-start").on("input", function() {
+        extension_settings[extensionName].advancedStart = parseInt($(this).val()) || -1;
+        saveSettings();
+    });
+    
+    $("#hide-helper-advanced-end").on("input", function() {
+        extension_settings[extensionName].advancedEnd = parseInt($(this).val()) || 0;
+        saveSettings();
+    });
+    
+    $("#hide-helper-advanced-apply-btn").on("click", function() {
+        applyHideSettings();
+    });
+    
+    $("#hide-helper-save-btn").on("click", function() {
+        applyHideSettings();
+        saveSettings();
+        toastr.success("设置已保存");
+    });
+}
 
-        if (!isNaN(parseInt(floor, 10)) && parseInt(floor, 10) >= 0) { // 简单的数字验证
-            if (floor < chat.length && chat[floor]) { // 检查索引是否有效，并避免chat[floor]为undefined
-                 $("#floor-info").text(`楼层 ${floor}: ${chat[floor].mes}`);
-            } else {
-                getChatLogLength(context.chatId).then(length => {
-                    if (floor < length) {
-                        fetchChatLog(context.chatId, floor, floor + 1).then(msg => {
-                             if (msg && msg[0]) { // 确保 msg 和 msg[0] 存在
-                                $("#floor-info").text(`楼层 ${floor}: ${msg[0].content}`);
-                            } else {
-                                $("#floor-info").text("楼层信息加载失败");
-                            }
-                        });
-                    } else {
-                         $("#floor-info").text("楼层号超出范围");
-                    }
-                });
-            }
-        } else {
-             $("#floor-info").text("请输入有效楼层号");
+// 导入hideChatMessageRange函数
+async function hideChatMessageRange(start, end, unhide) {
+    if (end === undefined || end === null) {
+        end = start;
+    }
+    
+    const hide = !unhide;
+    const context = getContext();
+    const chat = context.chat;
+    
+    if (!chat || chat.length === 0) {
+        console.warn("Chat is empty, cannot hide messages");
+        return;
+    }
+    
+    // 确保start和end在有效范围内
+    start = Math.max(0, Math.min(start, chat.length - 1));
+    end = Math.max(0, Math.min(end, chat.length - 1));
+    
+    // 遍历指定范围的消息并设置is_system属性
+    for (let messageId = start; messageId <= end; messageId++) {
+        const message = chat[messageId];
+        message.is_system = hide;
+        
+        // 更新DOM中的消息元素
+        const messageBlock = $(`.mes[mesid="${messageId}"]`);
+        messageBlock.attr('is_system', String(hide));
+    }
+    
+    // 更新滑动按钮和保存聊天记录
+    try {
+        // 这些函数可能在全局作用域中
+        if (typeof hideSwipeButtons === 'function') hideSwipeButtons();
+        if (typeof showSwipeButtons === 'function') showSwipeButtons();
+        if (typeof saveChatDebounced === 'function') saveChatDebounced();
+    } catch (error) {
+        console.error("Error updating UI after hiding messages:", error);
+    }
+}
+
+// 监听新消息事件，自动应用隐藏设置
+function setupMessageListener() {
+    eventSource.on(event_types.MESSAGE_RECEIVED, () => {
+        // 如果设置了自动隐藏，则在收到新消息时应用隐藏设置
+        if (extension_settings[extensionName].hideLastN > 0 || 
+            (extension_settings[extensionName].isAdvancedMode && 
+             extension_settings[extensionName].advancedStart >= -1 && 
+             extension_settings[extensionName].advancedEnd > extension_settings[extensionName].advancedStart)) {
+            applyHideSettings();
         }
     });
-    $("#floor-info").on("click", () => {
-        if ($("#floor-info").text().startsWith("楼层")) { // 简单判断是否显示了楼层信息才跳转
-             jumpToFloor($("#floor-input").val());
-             $("#floor-jump-popup").addClass("hidden"); // 跳转后隐藏弹窗
-        }
-    });
-     $("#floor-jump-action").on("click", () => {
-        jumpToFloor($("#floor-input").val());
-        $("#floor-jump-popup").addClass("hidden"); // 跳转后隐藏弹窗
-    });
+}
 
-
-    // 高级设置
-    $("#advanced-settings-btn").on("click", () => $("#advanced-settings-panel").toggleClass("hidden"));
-    $("input[name='scope']").on("change", (e) => extensionSettings.searchScope = e.target.value);
-    $("#real-time-rendering").on("change", (e) => {
-        extensionSettings.realTimeRendering = e.target.checked;
-        $("#search-action").text(e.target.checked ? "清空" : "确定");
-    });
-    $("#highlight-keywords").on("change", (e) => extensionSettings.highlightKeywords = e.target.checked);
-    $("#save-settings").on("click", () => {
-        saveSettingsDebounced();
-        $("#advanced-settings-panel").addClass("hidden");
-        toastr.success("高级检索设置已保存", null, { timeOut: 1500 }); // 提示保存成功
-    });
+// 插件初始化
+jQuery(async () => {
+    // 加载设置
+    loadSettings();
+    
+    // 创建UI
+    createUI();
+    
+    // 设置消息监听器
+    setupMessageListener();
+    
+    console.log("消息隐藏助手插件已加载");
 });
+```
