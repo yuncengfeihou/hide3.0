@@ -1,7 +1,3 @@
-
-### style.css
-
-```css
 .hide-helper-panel {
     position: fixed;
     right: 20px;
@@ -81,4 +77,3 @@
 .hide-helper-save-button:hover {
     background-color: var(--SmartThemeSuccessDarkColor);
 }
-```
