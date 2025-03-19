@@ -1,6 +1,5 @@
 import { extension_settings, loadExtensionSettings } from "../../../extensions.js";
 import { saveSettingsDebounced, eventSource, event_types } from "../../../../script.js";
-import { callPopup } from "../../../../script.js";
 import { getContext } from "../../../extensions.js";
 
 // 插件名称和设置
@@ -87,8 +86,13 @@ async function applyHideSettings() {
 
 // 创建插件UI
 function createUI() {
+    // 检查是否已存在UI，避免重复创建
+    if ($("#hide-helper-panel").length > 0) {
+        return;
+    }
+    
     const html = `
-    <div class="hide-helper-panel">
+    <div id="hide-helper-panel" class="hide-helper-panel">
         <div class="hide-helper-title">消息隐藏助手</div>
         
         <div class="hide-helper-section">
@@ -109,7 +113,10 @@ function createUI() {
     </div>
     `;
     
+    // 确保在body末尾添加UI
     $("body").append(html);
+    
+    console.log("消息隐藏助手UI已创建");
     
     // 绑定事件
     $("#hide-helper-last-n").on("input", function() {
@@ -222,14 +229,22 @@ function setupMessageListener() {
 
 // 插件初始化
 jQuery(async () => {
+    console.log("消息隐藏助手插件开始加载");
+    
     // 加载设置
     loadSettings();
     
-    // 创建UI
-    createUI();
+    // 确保DOM完全加载后再创建UI
+    setTimeout(() => {
+        createUI();
+        console.log("消息隐藏助手UI延迟加载");
+    }, 1000);
     
     // 设置消息监听器
     setupMessageListener();
     
     console.log("消息隐藏助手插件已加载");
 });
+
+// 导出hideChatMessageRange函数，使其可以被其他模块使用
+export { hideChatMessageRange };
