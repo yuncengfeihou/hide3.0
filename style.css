@@ -1,112 +1,84 @@
-#search-plugin-ui {
+
+### style.css
+
+```css
+.hide-helper-panel {
     position: fixed;
-    left: 10px;
-    top: 150px;
-    width: 220px; /* 稍微增加宽度以容纳更长的文本 */
-    background: #f8f8f8; /* 稍微调整背景色 */
-    border: 1px solid #ccc;
+    right: 20px;
+    top: 200px;
+    width: 150px;
+    height: auto;
+    background-color: var(--SmartThemeBodyColor);
+    border: 1px solid var(--SmartThemeBorderColor);
+    border-radius: 10px;
     padding: 10px;
     z-index: 1000;
-    border-radius: 5px; /* 添加圆角 */
-    box-shadow: 2px 2px 5px rgba(0,0,0,0.1); /* 添加阴影 */
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
 }
 
-.keyword-search, .scroll-buttons, .advanced-settings-button-area, #advanced-settings-panel, #floor-jump-popup {
+.hide-helper-title {
+    font-weight: bold;
+    text-align: center;
     margin-bottom: 10px;
+    color: var(--SmartThemeTextColor);
 }
 
-.keyword-search input {
-    width: calc(70% - 8px); /* 考虑按钮宽度 */
-    padding: 6px; /* 稍微调整内边距 */
-    border: 1px solid #ddd;
-    border-radius: 3px;
+.hide-helper-section {
+    margin-bottom: 15px;
 }
 
-.keyword-search button {
-    width: 28%; /* 稍微调整宽度 */
-    padding: 6px;
-    border: 1px solid #ddd;
-    border-radius: 3px;
-    background-color: #eee;
+.hide-helper-input {
+    width: 100%;
+    padding: 5px;
+    margin-bottom: 5px;
+    background-color: var(--SmartThemeInputColor);
+    color: var(--SmartThemeInputTextColor);
+    border: 1px solid var(--SmartThemeBorderColor);
+    border-radius: 5px;
+}
+
+.hide-helper-button {
+    width: 100%;
+    padding: 5px;
+    margin-top: 5px;
+    background-color: var(--SmartThemeButtonColor);
+    color: var(--SmartThemeButtonTextColor);
+    border: 1px solid var(--SmartThemeBorderColor);
+    border-radius: 5px;
     cursor: pointer;
 }
 
-.keyword-search button:hover {
-    background-color: #ddd;
+.hide-helper-button:hover {
+    background-color: var(--SmartThemeButtonHoverColor);
 }
 
-.scroll-buttons button {
-    width: 32%; /* 调整按钮宽度 */
-    padding: 8px; /* 稍微调整内边距 */
-    border: 1px solid #ddd;
-    border-radius: 3px;
-    background-color: #eee;
-    cursor: pointer;
-    font-size: 1em; /* 调整字体大小 */
+.hide-helper-advanced-panel {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 5px;
 }
 
-.scroll-buttons button:hover {
-    background-color: #ddd;
+.hide-helper-advanced-input {
+    width: 45%;
+    padding: 5px;
+    background-color: var(--SmartThemeInputColor);
+    color: var(--SmartThemeInputTextColor);
+    border: 1px solid var(--SmartThemeBorderColor);
+    border-radius: 5px;
 }
 
-#advanced-settings-btn, #save-settings, #floor-jump-popup button {
+.hide-helper-save-button {
     width: 100%;
     padding: 8px;
-    border: 1px solid #ddd;
-    border-radius: 3px;
-    background-color: #eee;
-    cursor: pointer;
-    margin-top: 5px; /* 增加按钮间距 */
-}
-
-#advanced-settings-btn:hover, #save-settings:hover, #floor-jump-popup button:hover {
-    background-color: #ddd;
-}
-
-#advanced-settings-panel, #floor-jump-popup {
-    background: #f9f9f9;
-    padding: 15px; /* 增加内边距 */
-    border: 1px solid #ddd;
+    margin-top: 10px;
+    background-color: var(--SmartThemeSuccessColor);
+    color: white;
+    border: none;
     border-radius: 5px;
-    margin-top: 5px;
-    box-shadow: 1px 1px 3px rgba(0,0,0,0.05); /* 轻微阴影 */
-}
-
-#advanced-settings-panel label, #floor-jump-popup label {
-    display: block; /* 标签独占一行 */
-    margin-bottom: 5px;
-    font-weight: bold; /* 标签加粗 */
-}
-
-#advanced-settings-panel input[type="radio"], #advanced-settings-panel input[type="checkbox"] {
-    margin-right: 5px;
-}
-
-.hidden {
-    display: none;
-}
-
-#floor-info {
     cursor: pointer;
-    margin-top: 8px;
-    padding: 8px;
-    border: 1px solid #eee;
-    border-radius: 3px;
-    background-color: #fff;
-    font-size: 0.9em; /* 减小字体大小 */
-    overflow-wrap: break-word; /* 长文本换行 */
 }
 
-#floor-input {
-    width: calc(100% - 12px);
-    padding: 6px;
-    border: 1px solid #ddd;
-    border-radius: 3px;
-    margin-bottom: 5px;
+.hide-helper-save-button:hover {
+    background-color: var(--SmartThemeSuccessDarkColor);
 }
-
-/* 错误提示样式 */
-.toast-error {
-    background-color: #f44336 !important;
-    color: white !important;
-}
+```
